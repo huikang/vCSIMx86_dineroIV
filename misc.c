@@ -83,6 +83,7 @@ d4new (d4cache *larger)
 		return NULL;
 	c->cacheid = nextcacheid++;
 	c->downstream = larger;
+    c->isllc = 0;
 	c->ref = d4ref;	/* may get altered for custom version */
 	c->link = d4_allcaches;
 	d4_allcaches = c;	/* d4customize depends on this LIFO order */
@@ -202,7 +203,7 @@ d4setup()
             nnodes = c->numsets * (1 + c->assoc) +
 				 (c->numsets * c->assoc + 1) * ((c->flags&D4F_CCC)!=0);
 			nodes = calloc (nnodes, sizeof(d4stacknode));
-			
+
             if (nodes == NULL)
 				goto fail11;
 			for (i = 0;  i < nnodes;  i++)
@@ -722,6 +723,30 @@ d4_invblock (d4cache *c, int stacknum, d4stacknode *ptr)
 	d4movetobot (c, stacknum, ptr);
 	if (c->stack[stacknum].n > D4HASH_THRESH)
 		d4_unhash (c, stacknum, ptr);
+    if (c->isllc) {
+        printf("\tInside d4_invblock for LLC\n");
+        printf("\t\tblock=%llu\n", ptr->blockaddr);
+        // invalid the node in the LLC_mam map tree;
+        d4memllc *p, *x;
+        int found;
+        d4addr blockaddr;
+
+        blockaddr = ptr->blockaddr;
+        p = (c->root);
+        x = p;
+        found = 0;
+        while (x != NULL) {
+            p = x;
+            if ((blockaddr == x->blockaddr) /*&& (x->valid != 1)*/ ) {
+                printf("\t\t[%s] Found %0lx vmid=%u\n", __func__, x->blockaddr, x->vmid);
+                found = 1;
+                break;
+            }
+            x = (blockaddr < x->blockaddr) ? x->left : x->right;
+        }
+        assert(found == 1);
+        x->valid = 0;
+    }
 }
 
 
@@ -798,6 +823,7 @@ d4invalidate (d4cache *c, const d4memref *m, int prop)
 	d4stacknode *ptr;
 	d4pendstack *newm;
 
+    printf("\tInside d4invalidate\n");
 	if (m != NULL)
 		assert (m->accesstype == D4XINVAL);
 	if (prop) {
@@ -860,24 +886,37 @@ d4_invinfcache (d4cache *c, const d4memref *m)
 		const unsigned int baddr = D4ADDR2BLOCK (c, m->address);
 		unsigned int bitoff;	/* offset of bit in bitmap */
 		int hi, lo, nsb;
+        
+        printf("\tInside %s baddr=%0lx\n", __func__, baddr);
 
 		bitoff = (baddr & (D4_BITMAP_RSIZE-1)) / sbsize;
 
 		/* binary search for range containing our address */
 		hi = c->nranges-1;
 		lo = 0;
+        printf("\t\t%s hi=%d cacheid=%d\n", __func__, hi, c->cacheid);
 		while (lo <= hi) {
 			i = lo + (hi-lo)/2;
-			if (c->ranges[i].addr + D4_BITMAP_RSIZE <= baddr)
+            printf("\t\tmid=%d, lo=%d, hi=%d\n", i, lo, hi);
+			if (c->ranges[i].addr + D4_BITMAP_RSIZE <= baddr) {
 				lo = i + 1;		/* need to look higher */
-			else if (c->ranges[i].addr > baddr)
+                printf("\t\tto higher\n");
+            }
+			else if (c->ranges[i].addr > baddr) {
 				hi = i - 1;		/* need to look lower */
+                printf("\t\tto lower\n");
+            }
 			else {				/* found the right range */
-				for (nsb = c->lg2blocksize - c->lg2subblocksize;
+                printf("\t\tnsb=%d\n", c->lg2blocksize - c->lg2subblocksize);
+                printf("\t\tnsb=%d\n", D4REFNSB (c, *m));
+				for (nsb = D4REFNSB (c, *m)/*c->lg2blocksize - c->lg2subblocksize*/;
 				     nsb-- > 0;
-				     bitoff++)
+				     bitoff++) {
+                    printf("\t\tinvalidate bit 1\n");
 					c->ranges[i].bitmap[bitoff/CHAR_BIT] &=
 					      ~(1<<(bitoff%CHAR_BIT));
+                    printf("\t\tinvalidate bit\n");
+                }
 				break;
 			}
 		}

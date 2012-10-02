@@ -80,6 +80,7 @@ typedef struct {
 	unsigned int processID;
 	unsigned int cpuID;
 	unsigned short size;		/* of memory referenced, in bytes */
+    unsigned char vmid;
 } d4memref;
 
 /* Node for a stack of pending memrefs per cache */
@@ -198,6 +199,21 @@ typedef struct d4_directoryNode{
 #define D4COLDIRSIZE 256
 #endif
 
+typedef enum {in_mem, in_llc} MEM_LLC_STATE;
+
+/*
+ * Represent each block's state. If the block is in LLC, the block is brought to
+ * the LLC by the vmid. If the block is in mem, the vmid is the VM which 
+ * replaces the block in the cache. 
+ */
+typedef struct d4_mem_llc {
+    d4addr  blockaddr;
+    unsigned char vmid;
+    MEM_LLC_STATE state;
+    unsigned char valid;
+    struct d4_mem_llc *left, *right;
+} d4memllc;
+
 //----------------------------------------------------------------------------
 
 /*
@@ -229,6 +245,8 @@ typedef struct d4_cache_struct {
 	int type;		/* u(0), i(1), d(2) - set by the user */
 	int numsets;	/* this one is derived, not set by the user */
 	
+    int isllc;       /* this is the cache right above mem */
+    
     /*
 	 * Cache Interconnection:
 	 * Caches must form a tree, with the root
@@ -280,7 +298,19 @@ typedef struct d4_cache_struct {
 	int			nranges;
 	int			maxranges;
 	d4range		*ranges;
-	
+    d4memllc    *root;
+    unsigned long inter_vm_miss;
+    unsigned long intra_vm_miss;
+    unsigned long vm_comp_miss;
+    
+    /* 
+     * Used to track memory element whether in the LLC. This only applies to 
+     * the LLC cache. 0: not in LLC. 1: in LLC
+     */
+    int         nranges_mtrack;
+    int         maxranges_mtrack;
+    d4range     *ranges_mtrack;
+    
 	/*
 	 * Cache statistics
 	 * Doubles are used as big integers

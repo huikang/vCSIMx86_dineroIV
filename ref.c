@@ -469,12 +469,15 @@ static int d4infcache (d4cache *c, d4memref m)
 	static int totranges = 0, totbitmaps = 0;
 
 	bitoff = (sbaddr & (D4_BITMAP_RSIZE-1)) / sbsize;
-
+    
 	/* binary search for range containing our address */
 	hi = c->nranges-1;
 	lo = 0;
+    printf("\t\t[%s] sbaddr=%0lx, hi=%u\n", __func__, sbaddr, hi);
+    
 	while (lo <= hi) {
 		i = lo + (hi-lo)/2;
+        printf("\t\tmid=%d\n", i);
 		if (c->ranges[i].addr + D4_BITMAP_RSIZE <= sbaddr)
 			lo = i + 1;		/* need to look higher */
 		else if (c->ranges[i].addr > sbaddr)
@@ -497,14 +500,20 @@ static int d4infcache (d4cache *c, d4memref m)
 						(1<<((bbitoff+b)%CHAR_BIT))) != 0);
 			}
 			/* set the bits */
-			for (b = 0;  b < nsb;  b++)
+			for (b = 0;  b < nsb;  b++) {
 				c->ranges[i].bitmap[(bitoff+b)/CHAR_BIT] |=
 					(1<<((bitoff+b)%CHAR_BIT));
+                printf("\t\tExist range %d bitoff %d %d\n", i, (bitoff+b)/CHAR_BIT,
+                       c->ranges[i].bitmap[(bitoff+b)/CHAR_BIT]);
+            }
+            printf("\t\t[%s] nsb=%d\n", __func__, nsb);
+            
 			return nb==0 ? 1 : -1;
 		}
 	}
 	/* lo > hi: range not found; find position and insert new range */
 	if (c->nranges >= c->maxranges-1) {
+        printf("\t\t[%s] Add range cacheid=%d\n", __func__, c->cacheid);
 		/* ran out of range pointers; allocate some more */
 		int oldmaxranges = c->maxranges;
 		c->maxranges = (c->maxranges + 10) * 2;
@@ -524,10 +533,15 @@ static int d4infcache (d4cache *c, d4memref m)
 		if (c->ranges[i].addr < sbaddr)
 			break;
 		c->ranges[i+1] = c->ranges[i];
+        printf("\t\tcopy old range %d to %d\n", i, i+1);
 	}
 	c->ranges[i+1].addr = sbaddr & ~(D4_BITMAP_RSIZE-1);
 	c->ranges[i+1].bitmap = calloc ((((D4_BITMAP_RSIZE + sbsize - 1)
 					/ sbsize) + CHAR_BIT - 1) / CHAR_BIT, 1);
+    /* printf("%s range=%dth, addr=%0lx, bitmap size=%d (nr of subblock)\n",
+           __func__, i+1, c->ranges[i+1].addr,
+           (((D4_BITMAP_RSIZE + sbsize - 1) / sbsize) + CHAR_BIT - 1) / CHAR_BIT);
+     */
 	if (c->ranges[i+1].bitmap == NULL) {
 		fprintf (stderr, "DineroIV: can't allocate another bitmap "
 			 "(currently %d, total %d, each mapping 0x%x bytes)\n",
@@ -535,10 +549,297 @@ static int d4infcache (d4cache *c, d4memref m)
 		exit(1);
 	}
 	totbitmaps++;
-	for (b = 0;  b < nsb;  b++, bitoff++)
+	for (b = 0;  b < nsb;  b++, bitoff++) {
 		c->ranges[i+1].bitmap[bitoff/CHAR_BIT] |= (1<<(bitoff%CHAR_BIT));
+        printf("\t\tInserted range %d bitoff %d %d\n",
+               i+1, bitoff/CHAR_BIT,
+               c->ranges[i+1].bitmap[bitoff/CHAR_BIT]);
+    }
 	return 1; /* we've not seen it before */
 }
+
+static int d4updatemmap (d4cache *c, d4memref m)
+{
+	const unsigned int sbsize = 1 << D4VAL (c, lg2subblocksize);
+	const d4addr sbaddr = D4ADDR2SUBBLOCK (c, m.address);
+	const int nsb = D4REFNSB (c, m);
+	unsigned int bitoff; /* offset of bit in bitmap */
+	int hi, lo, i, b;
+	static int totranges = 0, totbitmaps = 0;
+    
+	bitoff = (sbaddr & (D4_BITMAP_RSIZE-1)) / sbsize;
+    printf("\t\t[%s] sbsize=%u, sbaddr=%0lx, bitoff=%0lx\n",
+           __func__, sbsize, sbaddr, bitoff);
+
+	/* binary search for range containing our address */
+	hi = c->nranges_mtrack-1;
+    printf("\t\t[%s] nranges=%d maxranges=%d nsb=%d\n",
+           __func__, hi, c->maxranges_mtrack, nsb);
+	lo = 0;
+	while (lo <= hi) {
+		i = lo + (hi-lo)/2;
+		if (c->ranges_mtrack[i].addr + D4_BITMAP_RSIZE <= sbaddr)
+			lo = i + 1;		/* need to look higher */
+		else if (c->ranges_mtrack[i].addr > sbaddr)
+			hi = i - 1;		/* need to look lower */
+		else { /* found the right range */
+			const int sbpb = 1 << (D4VAL (c, lg2blocksize) - D4VAL (c, lg2subblocksize));
+			int nb;
+			/* count affected bits we've seen */
+			for (nb = 0, b = 0;  b < nsb;  b++)
+				nb += ((c->ranges_mtrack[i].bitmap[(bitoff+b)/CHAR_BIT] &
+                        (1<<((bitoff+b)%CHAR_BIT))) != 0);
+			if (nb == nsb)
+				return 0;	/* we've seen it all before */
+			/* consider the whole block */
+			if (sbpb != 1 && nsb != sbpb) {
+				unsigned int bbitoff = (D4ADDR2BLOCK (c, m.address) &
+                                        (D4_BITMAP_RSIZE-1)) / sbsize;
+				for (nb = 0, b = 0;  b < sbpb;  b++)
+					nb += ((c->ranges_mtrack[i].bitmap[(bbitoff+b)/CHAR_BIT] &
+                            (1<<((bbitoff+b)%CHAR_BIT))) != 0);
+			}
+			/* set the bits */
+			for (b = 0;  b < nsb;  b++) {
+				c->ranges_mtrack[i].bitmap[(bitoff+b)/CHAR_BIT] |=
+                (1<<((bitoff+b)%CHAR_BIT));
+                printf("\t\trange %d bitoff %d %d\n", i, bitoff+b,
+                       c->ranges_mtrack[i].bitmap[(bitoff+b)/CHAR_BIT]);
+            }
+			return nb==0 ? 1 : -1;
+		}
+	}
+	/* lo > hi: range not found; find position and insert new range */
+	if (c->nranges_mtrack >= c->maxranges_mtrack-1) {
+		/* ran out of range pointers; allocate some more */
+		int oldmaxranges = c->maxranges_mtrack;
+		c->maxranges_mtrack = (c->maxranges_mtrack + 10) * 2;
+		if (c->ranges_mtrack == NULL) /* don't trust realloc(NULL,...) */
+			c->ranges_mtrack = malloc (c->maxranges_mtrack * sizeof(*c->ranges_mtrack));
+		else
+			c->ranges_mtrack = realloc (c->ranges_mtrack,
+                                        c->maxranges_mtrack * sizeof(*c->ranges_mtrack));
+		if (c->ranges_mtrack == NULL) {
+			fprintf (stderr, "DineroIV: can't allocate more "
+                     "bitmap pointers for cache %s (%d so far, total %d)\n",
+                     c->name, oldmaxranges, totranges);
+			exit(1);
+		}
+		totranges++;
+	}
+	for (i = c->nranges_mtrack++ - 1;  i >= 0;  i--) {
+		if (c->ranges_mtrack[i].addr < sbaddr)
+			break;
+		c->ranges_mtrack[i+1] = c->ranges_mtrack[i];
+	}
+	c->ranges_mtrack[i+1].addr = sbaddr & ~(D4_BITMAP_RSIZE-1);
+	c->ranges_mtrack[i+1].bitmap = calloc ((((D4_BITMAP_RSIZE + sbsize - 1)
+                                      / sbsize) + CHAR_BIT - 1) / CHAR_BIT, 1);
+    printf("\t\t[%s] range=%dth, addr=%0lx, bitmap size=%d (nr of subblock)\n",
+           __func__, i+1, c->ranges_mtrack[i+1].addr,
+           (((D4_BITMAP_RSIZE + sbsize - 1) / sbsize) + CHAR_BIT - 1) / CHAR_BIT);
+    
+	if (c->ranges_mtrack[i+1].bitmap == NULL) {
+		fprintf (stderr, "DineroIV: can't allocate another bitmap "
+                 "(currently %d, total %d, each mapping 0x%x bytes)\n",
+                 c->nranges_mtrack-1, totbitmaps, D4_BITMAP_RSIZE);
+		exit(1);
+	}
+	totbitmaps++;
+	for (b = 0;  b < nsb;  b++, bitoff++) {
+		c->ranges_mtrack[i+1].bitmap[bitoff/CHAR_BIT] |= (1<<(bitoff%CHAR_BIT));
+        printf("\t\trange %d bitoff %d %d\n", i+1, bitoff,
+               c->ranges_mtrack[i+1].bitmap[(bitoff/CHAR_BIT)]);
+    }
+    printf("\t\t[%s] Setbit range %d bitoff %d\n", __func__, i+1, bitoff-1);
+	return 1; /* we've not seen it before */
+}
+
+static int d4replacemmap (d4cache *c, d4memref m)
+{
+	const unsigned int sbsize = 1 << D4VAL (c, lg2subblocksize);
+	const d4addr sbaddr = D4ADDR2SUBBLOCK (c, m.address);
+	const int nsb = D4REFNSB (c, m);
+	unsigned int bitoff; /* offset of bit in bitmap */
+	int hi, lo, i, b;
+    
+	bitoff = (sbaddr & (D4_BITMAP_RSIZE-1)) / sbsize;
+    printf("\t\t[%s] sbsize=%u, sbaddr=%0lx, bitoff=%0lx\n",
+           __func__, sbsize, sbaddr, bitoff);
+    
+	/* binary search for range containing our address */
+	hi = c->nranges_mtrack-1;
+    printf("\t\t[%s] nranges=%d maxranges=%d nsb=%d\n",
+           __func__, hi, c->maxranges_mtrack, nsb);
+	lo = 0;
+	while (lo <= hi) {
+		i = lo + (hi-lo)/2;
+		if (c->ranges_mtrack[i].addr + D4_BITMAP_RSIZE <= sbaddr)
+			lo = i + 1;		/* need to look higher */
+		else if (c->ranges_mtrack[i].addr > sbaddr)
+			hi = i - 1;		/* need to look lower */
+		else { /* found the right range */
+			const int sbpb = 1 << (D4VAL (c, lg2blocksize) - D4VAL (c, lg2subblocksize));
+			int nb;
+			/* count affected bits we've seen */
+			for (nb = 0, b = 0;  b < nsb;  b++)
+				nb += ((c->ranges_mtrack[i].bitmap[(bitoff+b)/CHAR_BIT] &
+                        (1<<((bitoff+b)%CHAR_BIT))) != 0);
+			if (nb == nsb) {
+                printf("\t\tSee the whole block nb=%d\n", nb);
+                for (b = 0;  b < nsb;  b++) {
+                    c->ranges_mtrack[i].bitmap[(bitoff+b)/CHAR_BIT] &=
+                    ~(1<<((bitoff+b)%CHAR_BIT));
+                    printf("\t\t[%s]range %d bitoff %d %d\n", __func__, i,
+                           bitoff+b, c->ranges_mtrack[i].bitmap[(bitoff+b)/CHAR_BIT]);
+                }
+				return 0;	/* we've seen it all before */
+            }
+			/* consider the whole block */
+			if (sbpb != 1 && nsb != sbpb) {
+				unsigned int bbitoff = (D4ADDR2BLOCK (c, m.address) &
+                                        (D4_BITMAP_RSIZE-1)) / sbsize;
+				for (nb = 0, b = 0;  b < sbpb;  b++)
+					nb += ((c->ranges_mtrack[i].bitmap[(bbitoff+b)/CHAR_BIT] &
+                            (1<<((bbitoff+b)%CHAR_BIT))) != 0);
+			}
+			/* clear the bits */
+			for (b = 0;  b < nsb;  b++) {
+				c->ranges_mtrack[i].bitmap[(bitoff+b)/CHAR_BIT] &=
+                    ~(1<<((bitoff+b)%CHAR_BIT));
+                printf("\t\t[%s] range %d bitoff %d %d\n", __func__, i, bitoff+b,
+                       c->ranges_mtrack[i].bitmap[(bitoff+b)/CHAR_BIT]);
+            }
+			return nb==0 ? 1 : -1;
+		}
+	}
+    
+    assert(0);
+}
+
+/*
+ * Update the state of an blockaddress in the memory
+ * Parameters: (1) c must be the LLC
+ *             (2) blockaddr is the key in the BST
+ *             (3) access = 1: the blockaddr is accessed, e.g., brough to the LLC;
+ *                 access = 0: means it is being replaced.
+ *             (4) vmid, requesting the insert, or replace
+ * Return:     0: not miss
+ *             1: inter_vm miss, 2: intra_vm miss, 3: compulsory miss
+ *
+ */
+static int update_llc_mem_list(d4cache *c, d4addr blockaddr, int access, int vmid) {
+    d4memllc *p, *x;
+    int found;
+    int vm_miss;
+    
+    vm_miss = 0;
+    if ((c->root) == NULL) {
+        p = malloc(sizeof(d4memllc));
+        p->blockaddr = blockaddr;
+        p->state = access;
+        p->vmid = vmid;
+        p->valid = 1;
+        p->left = p->right = NULL;
+        c->root = p;
+        c->vm_comp_miss++;
+        /*printf("\t\t[%s] Create the first element %0lx vmid=%u\n", __func__,
+               ((c->root))->blockaddr, c->root->vmid);*/
+        vm_miss = 3;
+    }
+    
+    //printf("\t\t[%s] Root element %0lx\n", __func__,
+    //       ((c->root))->blockaddr);
+    p = (c->root);
+    x = p;
+    found = 0;
+    while (x != NULL) {
+        p = x;
+        if (blockaddr == x->blockaddr) {
+            printf("\t\t[%s] Found %0lx vmid=%u, access=%d\n",
+                   __func__, x->blockaddr, x->vmid, access);
+            found = 1;
+            break;
+        }
+        x = (blockaddr < x->blockaddr) ? x->left : x->right;
+    }
+    
+    if (!access)    /* For replacing, we must found the address */
+        assert(found == 1);
+    
+    if (found) {
+        if (access) {   /* bring the vm into LLC */
+            if (x->state == in_mem) {
+                if (x->vmid != vmid) {
+                    if (x->valid) {
+                        printf("\t\t[%s] inter miss %u replace by %u\n",
+                           __func__, x->vmid, vmid);
+                        c->inter_vm_miss++;
+                        vm_miss = 1;
+                    } else {
+                        printf("line: %d\n", __LINE__);
+                        c->vm_comp_miss++;
+                        vm_miss = 3;
+                    }
+                } else {
+                    if (x->valid) {
+                        printf("\t\t[%s] intra miss vmid=%u, state=%u\n",
+                           __func__, vmid, x->valid);
+                        c->intra_vm_miss++;
+                        vm_miss = 2;
+                    } else {
+                        printf("line: %d\n", __LINE__);
+                        c->vm_comp_miss++;
+                        vm_miss = 3;
+                    }
+                }
+                x->state = in_llc;
+                x->vmid = vmid;
+                x->valid = 1;
+            } else if (x->valid == 0) {
+                assert(x->state == in_llc);
+                
+                x->valid = 1;
+                c->vm_comp_miss++;
+                vm_miss = 3;
+                printf("\t\t[%s] validate %0lx by vmid %u\n", __func__, blockaddr, x->vmid);
+            }
+        } else {        /* replace this element to memory, vmid causes the replacement */
+            assert(x->state == in_llc);
+            x->state = in_mem;
+            x->vmid = vmid;
+            x->valid = 0;
+            printf("\t\t[%s] replacing %0lx to mem by vmid=%u\n",
+                   __func__, x->blockaddr, x->vmid);
+        }
+    } else {
+        /* Bring a new element to LLC */
+        x = malloc(sizeof(d4memllc));
+        x->blockaddr = blockaddr;
+        x->vmid = vmid;
+        x->state = in_llc;
+        x->left = x->right = NULL;
+        x->valid = 1;
+        if (blockaddr < p->blockaddr)
+            p->left = x;
+        else
+            p->right = x;
+        c->vm_comp_miss++;
+        vm_miss = 3;
+        printf("\t\t[%s] insert %0lx by vmid %u\n", __func__, blockaddr, x->vmid);
+        
+    }
+    
+    double demand_comp_alltype;
+    demand_comp_alltype = c->comp_miss[D4XMISC]
+    + c->comp_miss[D4XREAD]
+    + c->comp_miss[D4XWRITE]
+    +c->comp_miss[D4XINSTRN];
+    printf("\t\t[%s] vm comp_miss=%d\n", __func__, c->vm_comp_miss);
+    printf("\t\t[%s] comp_miss=%f\n", __func__, demand_comp_alltype);
+    return vm_miss;
+}
+
 #endif /* !D4CUSTOM || D4_OPT (ccc) */
 
 
@@ -553,6 +854,7 @@ D4_INLINE d4memref d4_splitm (d4cache *c, d4memref mr, d4addr ba)
 	int newsize;
 	d4pendstack *pf;
 
+    printf("\t\tInside split\n");
 	if (ba == D4ADDR2BLOCK (c, mr.address + mr.size - 1))
 		return mr;
 	pf = d4get_mref();
@@ -583,12 +885,16 @@ void d4ref (d4cache *c, d4memref mr)
 	printf("\t\tmemref struct: address[%llu], accesstype[%d], size[%d]\n", mr.address, mr.accesstype, mr.size);
 #endif
 	/* special cases first */
-    if ((D4VAL (c, flags) & D4F_MEM) != 0) /* special case for simulated memory */
+    if ((D4VAL (c, flags) & D4F_MEM) != 0) { /* special case for simulated memory */
 		c->fetch[(int)mr.accesstype]++;
+        printf("\t\tIn main memory\n");
+    }
     else if (mr.accesstype == D4XCOPYB || mr.accesstype == D4XINVAL) {
 		d4memref m = mr;	/* dumb compilers might de-optimize if we take addr of mr */
-		if (m.accesstype == D4XCOPYB)
+		if (m.accesstype == D4XCOPYB) {
+            printf("\t\tInside %s\n", __func__);
 			d4copyback (c, &m, 1);
+        }
 		else
 			d4invalidate (c, &m, 1);
     }
@@ -601,9 +907,11 @@ void d4ref (d4cache *c, d4memref mr)
 		const int ronly = D4CUSTOM && (D4VAL (c, flags) & D4F_RO) != 0; /* conservative */
 		const int walloc = !ronly && atype == D4XWRITE && D4VAL (c, wallocf) (c, m);
 		const int sbbits = D4ADDR2SBMASK (c, m);
-	
+        unsigned char vmid = mr.vmid;
+        printf("\t\tvmid=%u\n", vmid);
 		int miss, blockmiss, wback;
 		d4stacknode *ptr;
+        int vm_miss;
 
 		if ((D4VAL (c, flags) & D4F_RO) != 0 && atype == D4XWRITE) {
 			fprintf (stderr, "Dinero IV: write to read-only cacheid %d (%s)\n",
@@ -616,6 +924,9 @@ void d4ref (d4cache *c, d4memref mr)
 		 * Quickly check for top of stack.
 		 */
 		ptr = c->stack[setnumber].top;
+        if (ptr->valid == 0) {
+            printf("%llu Invalid entry\n", blockaddr);
+        }
 		if (ptr->blockaddr == blockaddr && ptr->valid != 0)
 			; /* found it */
 		else if (!D4CUSTOM || D4VAL (c, assoc) > 1)
@@ -649,6 +960,9 @@ void d4ref (d4cache *c, d4memref mr)
 		if ((!D4CUSTOM || !D4_OPT (prefetch_none)) && (m.accesstype == D4XREAD || m.accesstype == D4XINSTRN)) {
 			d4pendstack *pf = D4VAL (c, prefetchf) (c, m, miss, ptr);
 			if (pf != NULL) {
+                if (c->isllc) {
+                    printf("\t\tinside LLC Prefetch\n");
+                }
 				/* Note: 0 <= random() <= 2^31-1 and 0 <= random()/(INT_MAX/100) < 100. */
 				if (D4VAL (c, prefetch_abortpercent) > 0 && random()/(INT_MAX/100) < D4VAL (c, prefetch_abortpercent))
 					d4put_mref (pf);	/* throw it away */
@@ -658,7 +972,7 @@ void d4ref (d4cache *c, d4memref mr)
 				}
 			}
 		}
-
+        
 		/*
 		 * Update the cache
 		 * Don't do it for non-write-allocate misses
@@ -681,6 +995,19 @@ void d4ref (d4cache *c, d4memref mr)
 				ptr->dirty = 0;
 			}
 			ptr->valid |= sbbits;
+            
+            if (c->isllc) {
+                /*
+                 * Update the blockaddr in the tree, blockaddr is being accessed
+                 * This must be doen when a replacement is happened
+                 * i.e., for any read hit, read miss,
+                 */
+                /* d4updatemmap (c, m); */
+                vm_miss = update_llc_mem_list(c, blockaddr, 1, vmid);
+                printf("\t\t[%s] LLC raddr=%0lx baddr=%0lx sbbits=%d setnumber=%d, vmid=%u\n",
+                       __func__, mr.address, blockaddr, sbbits, setnumber, mr.vmid);
+            }
+            
 			if ((m.accesstype & D4PREFETCH) == 0) /* prefetching usage statistic */
 				ptr->referenced |= sbbits;
 
@@ -707,9 +1034,16 @@ void d4ref (d4cache *c, d4memref mr)
 			if (blockmiss) {
 				d4stacknode *rptr = c->stack[setnumber].top->up;
 				if (rptr->valid != 0) {
+                    
 #if (D4DEBUG)
 					printf("\t\tdisplacing cache blockaddr: %llu\n", rptr->blockaddr);
 #endif
+                    d4memref tmp_m;
+                    tmp_m.address = rptr->blockaddr;
+                    tmp_m.size = mr.size;
+                    if (c->isllc)
+                        update_llc_mem_list(c, rptr->blockaddr, 0, vmid);
+                        //d4replacemmap (c, tmp_m);
 					if (!ronly && (rptr->valid & rptr->dirty) != 0)
 						d4_wbblock (c, rptr, D4VAL (c, lg2subblocksize));
 					if (c->stack[setnumber].n > D4HASH_THRESH)
@@ -745,9 +1079,10 @@ void d4ref (d4cache *c, d4memref mr)
 			newm->m.address = D4ADDR2SUBBLOCK (c, m.address);
 			newm->m.size = D4REFNSB (c, m) << D4VAL (c, lg2subblocksize);
 			newm->next = c->pending;
+            newm->m.vmid = vmid;
 			c->pending = newm;
 #if (D4DEBUG)
-			printf("\t\tpending reference created\n");
+			printf("\t\tpending reference created size%d\n", newm->m.size);
 #endif
 		}
 		if (miss && (ronly || atype != D4XWRITE))/*|| (walloc && m.size != D4REFNSB (c, m) << D4VAL (c, lg2subblocksize))))*/ {
@@ -760,6 +1095,7 @@ void d4ref (d4cache *c, d4memref mr)
 			newm->m.address = D4ADDR2SUBBLOCK (c, m.address);
 			newm->m.size = D4REFNSB (c, m) << D4VAL (c, lg2subblocksize);
 			newm->next = c->pending;
+            newm->m.vmid = vmid;
 			c->pending = newm;
 #if (D4DEBUG)
 			printf("\t\tpending reference created\n");
@@ -776,6 +1112,7 @@ void d4ref (d4cache *c, d4memref mr)
 						/* set to use for fully assoc cache */
 			const int fullset = D4VAL(c,numsets);
 						/* number of blocks in fully assoc cache */
+            /*printf("ccc, fullset=%d setsize=%d\n", fullset, c->stack[fullset-2].n);*/
 			int fullmiss, fullblockmiss;	/* like miss and blockmiss, but for fully assoc cache */
 	
 			ptr = c->stack[fullset].top;
@@ -801,10 +1138,25 @@ void d4ref (d4cache *c, d4memref mr)
 					c->conf_miss[(int)m.accesstype]++;
 				else {
 					infmiss = d4infcache (c, m);
-					if (infmiss != 0) /* first miss: compulsory */
-						c->comp_miss[(int)m.accesstype]++;
+					if (infmiss != 0) {/* first miss: compulsory */
+                        c->comp_miss[(int)m.accesstype]++;
+                    }
 					else	/* hit in infinite cache: capacity miss */
 						c->cap_miss[(int)m.accesstype]++;
+                    
+                    if (c->isllc) {
+                        double demand_comp_alltype;
+                        demand_comp_alltype = c->comp_miss[D4XMISC]
+                        + c->comp_miss[D4XREAD]
+                        + c->comp_miss[D4XWRITE]
+                        +c->comp_miss[D4XINSTRN];
+                        if ((demand_comp_alltype !=  c->vm_comp_miss ) && c->isllc) {
+                            printf("\t\tinconsistent vm_miss=%d, infmiss=%d\n", vm_miss, infmiss);
+                        }
+                        printf("\t\tvm_miss=%d, infmiss=%d\n", vm_miss, infmiss);
+                        printf("\t\tvm_comp_miss=%d\n", c->vm_comp_miss);
+                        printf("\t\tcomp_miss=%f\n", demand_comp_alltype);
+                    }
 				}
 				if (blockmiss) {
 					if (!fullblockmiss) /* block hit in full assoc */
@@ -826,7 +1178,7 @@ void d4ref (d4cache *c, d4memref mr)
 				}
 			}
 		}
-   	 
+        
 		/*
 		 * Update non-ccc metrics. 
 		 */

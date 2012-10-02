@@ -1134,8 +1134,15 @@ dostats()
 
 			do1stats (&cc, cachenumber);
 		}
-		else
+		else {
 			do1stats (levcache[i], cachenumber);
+            if (levcache[i]->isllc) {
+                printf("===== LLC stats ====\n");
+                printf("inter VM miss %lu\n", levcache[i]->inter_vm_miss);
+                printf("intra VM miss %lu\n", levcache[i]->intra_vm_miss);
+                printf("compulsory miss %lu\n", levcache[i]->vm_comp_miss);
+            }
+        }
 		cachenumber++;
 	}
 }
@@ -1290,6 +1297,12 @@ do1stats (d4cache *c, int cachenumber)
 		      	  + c->comp_miss[D4XWRITE];
 		demand_comp_alltype = demand_comp_data 
 			  + c->comp_miss[D4XINSTRN];
+        if (c->isllc) {
+            printf("   Compulsory misc=%f read=%f write=%f inst=%f\n",
+                   c->comp_miss[D4XMISC], c->comp_miss[D4XREAD],
+                   c->comp_miss[D4XWRITE], c->comp_miss[D4XINSTRN]);
+        }
+        
 		demand_cap_data = c->cap_miss[D4XMISC] 
 			  + c->cap_miss[D4XREAD]
 		      	  + c->cap_miss[D4XWRITE];
@@ -1729,7 +1742,6 @@ next_trace_item()
 		
 		//printf("\t inside while()\n");
 		r = input_function();
-		//printf("\t after input_function\n");
 		if(r.isOK!=0){
 
 			if (r.accesstype == D4TRACE_END) {
@@ -1769,11 +1781,19 @@ initialize_caches (d4cache *(*icachep)[], d4cache *(*dcachep)[])
 
 	/* determine memory hierarchy structure */
 	maxcaches = 0;
+    printf("%s, maxlevel=%d\n\n", __func__, maxlevel);
+    
+    /* level_multicore[idu][lev], idu=0 is unified cache
+     *                          idu=1 || idu=2 is split cache for inst and data
+     */
 	for (lev = maxlevel-1;  lev >= 0;  lev--) {
 		for (idu = 0;  idu < 3;  idu++) {
 			if (level_multicore[idu][lev] != 0) {
+                printf("%s, %d level multicore \n", __func__, idu);
 				maxcaches += level_multicore[idu][lev];
 				cacheperlevel[lev] += level_multicore[idu][lev];
+                printf("%s, level_multicore=%d\n", __func__, level_multicore[idu][lev]);
+                printf("%s, maxcaches=%d\n", __func__, maxcaches);
 				if(idu == 1 || idu == 2)
 					issplitcache[lev] = 1;
 			}
@@ -1785,7 +1805,11 @@ initialize_caches (d4cache *(*icachep)[], d4cache *(*dcachep)[])
 		else
 			groupsize[lev] = cacheperlevel[lev] / cacheperlevel[lev+1];
 		numgroups[lev] = cacheperlevel[lev] / groupsize[lev];
+        
+        printf("lev: %d cacheperlevel: %d groupsize: %d numgroups: %d\n\n",
+               lev, cacheperlevel[lev], groupsize[lev], numgroups[lev]);
 	}
+    printf("\n%s, maxcaches=%d\n", __func__, maxcaches);
 	d4cache	*c[maxcaches];
 
 	/*
@@ -1812,6 +1836,7 @@ initialize_caches (d4cache *(*icachep)[], d4cache *(*dcachep)[])
 	for (i = 0;  i < maxlevel;  i++) {
 		levelstart[i] = levelsum;
 		levelsum += cacheperlevel[i];
+        printf("levelstart %d leve at %d\n", i, levelstart[i]);
 	}
 
 	for (i = 0;  i < maxlevel;  i++) {
@@ -1835,8 +1860,11 @@ initialize_caches (d4cache *(*icachep)[], d4cache *(*dcachep)[])
 						c[groupstart+k]->downstream = c[levelstart[i+1] + j];
 				}
 				else {								/* unified->unified */
-					if (i == maxlevel-1)			/* caches connected to memory */
+					if (i == maxlevel-1) {			/* caches connected to memory */
 						c[groupstart+k]->downstream = mem;
+                        c[groupstart+k]->isllc = 1;
+                        printf("cache %d is llc\n", c[groupstart+k]->cacheid);
+                    }
 					else
 						c[groupstart+k]->downstream = c[levelstart[i+1] + j];
 				}
@@ -1845,8 +1873,9 @@ initialize_caches (d4cache *(*icachep)[], d4cache *(*dcachep)[])
 			 * alternative stuff required for initialization
 			 */
 				c[groupstart+k]->level = i;
-
 				if (issplitcache[i]) {
+                    printf("lev %d coretracker=%d cache %d split\n",
+                           i, coretracker, k);
 					if ((k % 2) == 0) {				/* ignore instruction caches */
 						if(i == 0)
 							(*dcachep)[coretracker] = c[groupstart+k];
@@ -1865,6 +1894,8 @@ initialize_caches (d4cache *(*icachep)[], d4cache *(*dcachep)[])
 					}
 				}
 				else {
+                    printf("lev %d coretracker=%d cache %d NOT split\n",
+                           i, coretracker, k);
 					if(i == 0) {
 						(*dcachep)[coretracker] = c[groupstart+k];
 						(*icachep)[coretracker] = c[groupstart+k];
@@ -2049,7 +2080,7 @@ int main (int argc, char **argv)
 
 #if !D4CUSTOM
 	if (customname != NULL) {
-		customize_caches();
+    	customize_caches();
 	}
 #endif
 
@@ -2060,6 +2091,13 @@ int main (int argc, char **argv)
 	printf ("---Copyright (C) 1985, 1989 Mark D. Hill.  All rights reserved.\n");
 	printf ("---See -copyright option for details\n");
 
+    printf("\ncorecount=%d\n", corecount);
+    int i = 0;
+    for (i = 0; i < corecount; i++) {
+        printf("d cacheid=%d\n", cd[i]->cacheid);
+    }
+    printf("sizeof d4addr=%lu\n", sizeof(d4addr));
+    
 	summarize_caches (ci[0], cd[0]); /* output options chosen on commandline */
 
 	printf ("\n---Simulation begins.\n");
@@ -2102,8 +2140,8 @@ int main (int argc, char **argv)
 #if (D4DEBUG)
 			printf("DIRECTORY_HASH: %llu\n", directory_hash);
 #endif
+            printf("xxx1\n");
 			d4addr blockaddr = D4ADDR2BLOCK(cd[0], r.address);
-
 			d4directoryNode *found = d4findDirectoryNode(coherency_directory[directory_hash], blockaddr);
 			if(found == NULL) {
 				d4MESI state = (r.accesstype == D4XREAD) ? exclusive : modified;
@@ -2112,11 +2150,12 @@ int main (int argc, char **argv)
 			else
 				d4changeDirectoryState(found, &r, cd);
 		}
-
+        
+        printf("r cpuid=%d vmid=%u\n", r.cpuID, r.vmid);
 		switch (r.accesstype) {
-		case D4XINSTRN:	  	d4ref (ci[r.cpuID], r);  break;
-		case D4XINVAL:	  	d4ref (cd[r.cpuID], r);  break;/* modified - might not function correctly */
-		default:	  		d4ref (cd[r.cpuID], r);  break;
+        case D4XINSTRN:	  	d4ref (ci[r.cpuID], r);  printf("inst\n"); break;
+		case D4XINVAL:	  	d4ref (cd[r.cpuID], r);  printf("inva\n"); break;/* modified - might not function correctly */
+		default:	  		d4ref (cd[r.cpuID], r);  /*printf("dat\n")*/; break;
 		}
 		tmaxcount += 1;
 		if (tintcount > 0 && (tintcount -= 1) <= 0) {

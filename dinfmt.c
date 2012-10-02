@@ -70,7 +70,7 @@ tracein_din()
 {
 	int i;
 	char c, instrData;
-	char cpuNumber[8], processID[8], size[8];
+	char cpuNumber[8], processID[8], size[8], vmid[8];
 	
 	d4memref r;
 	r.isOK = 1; /* Set to 1, if we encounter a problem it'll be set to 0
@@ -90,6 +90,7 @@ tracein_din()
 		r.processID = 0;
 		r.accesstype = D4TRACE_END;
 		r.size = 0;
+        r.vmid = 64;
         return r;	/* this will trigger normal termination */
 	}
 
@@ -181,7 +182,32 @@ tracein_din()
 			goto panic;
 		getchar();
 	}
-
+    
+	/*============================= VM ID =========================*/
+    if(instrData == 'I') {
+        getchar();
+        getchar();
+    }
+    i = 0;
+    while((c = getchar())) {
+        if(i > 6) {
+            vmid[i] = '\0';
+            goto panic;
+        }
+        else
+            vmid[i] = c;
+        
+        if(!isdigit(vmid[i]) && !isspace(vmid[i]) && vmid[i] != '-')
+            goto panic;
+        else if ((isspace(vmid[i])) || (vmid[i] == EOF)) {
+            vmid[i] = '\0';
+            break;
+        }
+        i++;
+    }
+    r.vmid = atoi(vmid);
+    printf("vmid=%u\n", r.vmid);
+    
 	return r;
 
 	panic:
