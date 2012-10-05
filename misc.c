@@ -723,6 +723,8 @@ d4_invblock (d4cache *c, int stacknum, d4stacknode *ptr)
 	d4movetobot (c, stacknum, ptr);
 	if (c->stack[stacknum].n > D4HASH_THRESH)
 		d4_unhash (c, stacknum, ptr);
+    
+    /*
     if (c->isllc) {
         printf("\tInside d4_invblock for LLC\n");
         printf("\t\tblock=%llu\n", ptr->blockaddr);
@@ -737,7 +739,7 @@ d4_invblock (d4cache *c, int stacknum, d4stacknode *ptr)
         found = 0;
         while (x != NULL) {
             p = x;
-            if ((blockaddr == x->blockaddr) /*&& (x->valid != 1)*/ ) {
+            if (blockaddr == x->blockaddr ) {
                 printf("\t\t[%s] Found %0lx vmid=%u\n", __func__, x->blockaddr, x->vmid);
                 found = 1;
                 break;
@@ -746,7 +748,7 @@ d4_invblock (d4cache *c, int stacknum, d4stacknode *ptr)
         }
         assert(found == 1);
         x->valid = 0;
-    }
+    }*/
 }
 
 
@@ -896,9 +898,17 @@ d4_invinfcache (d4cache *c, const d4memref *m)
 		lo = 0;
         printf("\t\t%s hi=%d cacheid=%d\n", __func__, hi, c->cacheid);
 		while (lo <= hi) {
+            d4addr middle_addr;
 			i = lo + (hi-lo)/2;
+            middle_addr = c->ranges[i].addr + D4_BITMAP_RSIZE;
+            
+            if (!middle_addr) { /* overflow !*/
+                middle_addr = c->ranges[i].addr + D4_BITMAP_RSIZE - 1;
+            }
+            
             printf("\t\tmid=%d, lo=%d, hi=%d\n", i, lo, hi);
-			if (c->ranges[i].addr + D4_BITMAP_RSIZE <= baddr) {
+            printf("\t\tmid=%d, range=%0lx, baddr=%0lx\n", i, middle_addr, baddr);
+			if (middle_addr <= baddr) {
 				lo = i + 1;		/* need to look higher */
                 printf("\t\tto higher\n");
             }
@@ -917,6 +927,33 @@ d4_invinfcache (d4cache *c, const d4memref *m)
 					      ~(1<<(bitoff%CHAR_BIT));
                     printf("\t\tinvalidate bit\n");
                 }
+                
+                
+                if (c->isllc) {
+                    printf("\tInside %s for LLC\n", __func__);
+                    printf("\t\tblock=%llu\n", baddr);
+                    // invalid the node in the LLC_mam map tree;
+                    d4memllc *p, *x;
+                    int found;
+                    d4addr blockaddr;
+                    
+                    blockaddr = baddr;
+                    p = (c->root);
+                    x = p;
+                    found = 0;
+                    while (x != NULL) {
+                        p = x;
+                        if (blockaddr == x->blockaddr ) {
+                            printf("\t\t[%s] Found %0lx vmid=%u\n", __func__, x->blockaddr, x->vmid);
+                            found = 1;
+                            break;
+                        }
+                        x = (blockaddr < x->blockaddr) ? x->left : x->right;
+                    }
+                    assert(found == 1);
+                    x->infvalid = 0;
+                }
+                
 				break;
 			}
 		}

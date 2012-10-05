@@ -534,6 +534,7 @@ static int d4infcache (d4cache *c, d4memref m)
 			break;
 		c->ranges[i+1] = c->ranges[i];
         printf("\t\tcopy old range %d to %d\n", i, i+1);
+        printf("\t\tRange %d is %0lx\n", i+1, c->ranges[i+1].addr);
 	}
 	c->ranges[i+1].addr = sbaddr & ~(D4_BITMAP_RSIZE-1);
 	c->ranges[i+1].bitmap = calloc ((((D4_BITMAP_RSIZE + sbsize - 1)
@@ -555,6 +556,7 @@ static int d4infcache (d4cache *c, d4memref m)
                i+1, bitoff/CHAR_BIT,
                c->ranges[i+1].bitmap[bitoff/CHAR_BIT]);
     }
+    printf("\t\tInserted at range %d begining %0lx\n", i+1, c->ranges[i+1].addr);
 	return 1; /* we've not seen it before */
 }
 
@@ -739,7 +741,7 @@ static int update_llc_mem_list(d4cache *c, d4addr blockaddr, int access, int vmi
         p->blockaddr = blockaddr;
         p->state = access;
         p->vmid = vmid;
-        p->valid = 1;
+        p->infvalid = 1;
         p->left = p->right = NULL;
         c->root = p;
         c->vm_comp_miss++;
@@ -770,36 +772,31 @@ static int update_llc_mem_list(d4cache *c, d4addr blockaddr, int access, int vmi
     if (found) {
         if (access) {   /* bring the vm into LLC */
             if (x->state == in_mem) {
-                if (x->vmid != vmid) {
-                    if (x->valid) {
+                
+                if (x->infvalid == 0) {
+                    c->vm_comp_miss++;
+                    vm_miss = 3;
+                } else {
+                
+                    if (x->vmid != vmid) {
                         printf("\t\t[%s] inter miss %u replace by %u\n",
-                           __func__, x->vmid, vmid);
+                               __func__, x->vmid, vmid);
                         c->inter_vm_miss++;
                         vm_miss = 1;
                     } else {
-                        printf("line: %d\n", __LINE__);
-                        c->vm_comp_miss++;
-                        vm_miss = 3;
-                    }
-                } else {
-                    if (x->valid) {
                         printf("\t\t[%s] intra miss vmid=%u, state=%u\n",
-                           __func__, vmid, x->valid);
+                               __func__, vmid, x->infvalid);
                         c->intra_vm_miss++;
                         vm_miss = 2;
-                    } else {
-                        printf("line: %d\n", __LINE__);
-                        c->vm_comp_miss++;
-                        vm_miss = 3;
                     }
                 }
                 x->state = in_llc;
                 x->vmid = vmid;
-                x->valid = 1;
-            } else if (x->valid == 0) {
+                x->infvalid = 1;
+            } else if (x->infvalid == 0) {
                 assert(x->state == in_llc);
                 
-                x->valid = 1;
+                x->infvalid = 1;
                 c->vm_comp_miss++;
                 vm_miss = 3;
                 printf("\t\t[%s] validate %0lx by vmid %u\n", __func__, blockaddr, x->vmid);
@@ -808,7 +805,7 @@ static int update_llc_mem_list(d4cache *c, d4addr blockaddr, int access, int vmi
             assert(x->state == in_llc);
             x->state = in_mem;
             x->vmid = vmid;
-            x->valid = 0;
+            //x->infvalid = 1;
             printf("\t\t[%s] replacing %0lx to mem by vmid=%u\n",
                    __func__, x->blockaddr, x->vmid);
         }
@@ -819,7 +816,7 @@ static int update_llc_mem_list(d4cache *c, d4addr blockaddr, int access, int vmi
         x->vmid = vmid;
         x->state = in_llc;
         x->left = x->right = NULL;
-        x->valid = 1;
+        x->infvalid = 1;
         if (blockaddr < p->blockaddr)
             p->left = x;
         else
@@ -1143,20 +1140,6 @@ void d4ref (d4cache *c, d4memref mr)
                     }
 					else	/* hit in infinite cache: capacity miss */
 						c->cap_miss[(int)m.accesstype]++;
-                    
-                    if (c->isllc) {
-                        double demand_comp_alltype;
-                        demand_comp_alltype = c->comp_miss[D4XMISC]
-                        + c->comp_miss[D4XREAD]
-                        + c->comp_miss[D4XWRITE]
-                        +c->comp_miss[D4XINSTRN];
-                        if ((demand_comp_alltype !=  c->vm_comp_miss ) && c->isllc) {
-                            printf("\t\tinconsistent vm_miss=%d, infmiss=%d\n", vm_miss, infmiss);
-                        }
-                        printf("\t\tvm_miss=%d, infmiss=%d\n", vm_miss, infmiss);
-                        printf("\t\tvm_comp_miss=%d\n", c->vm_comp_miss);
-                        printf("\t\tcomp_miss=%f\n", demand_comp_alltype);
-                    }
 				}
 				if (blockmiss) {
 					if (!fullblockmiss) /* block hit in full assoc */
@@ -1166,8 +1149,24 @@ void d4ref (d4cache *c, d4memref mr)
 				else /* part of block hit in infinite cache */
 					c->cap_blockmiss[(int)m.accesstype]++;
 				}
+                
+                if (c->isllc) {
+                    double demand_comp_alltype;
+                    demand_comp_alltype = c->comp_miss[D4XMISC]
+                    + c->comp_miss[D4XREAD]
+                    + c->comp_miss[D4XWRITE]
+                    +c->comp_miss[D4XINSTRN];
+                    if ((demand_comp_alltype !=  c->vm_comp_miss ) && c->isllc) {
+                        printf("\t\tinconsistent vm_miss=%d, infmiss=%d\n", vm_miss, infmiss);
+                    }
+                    printf("\t\tvm_miss=%d, infmiss=%d\n", vm_miss, infmiss);
+                    printf("\t\tvm_comp_miss=%d\n", c->vm_comp_miss);
+                    printf("\t\tcomp_miss=%f\n", demand_comp_alltype);
+                }
 			}
 	
+            
+            
 			/* take care of replaced block */
 			if (fullblockmiss) {
 				d4stacknode *rptr = c->stack[fullset].top->up;
