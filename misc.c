@@ -922,36 +922,36 @@ d4_invinfcache (d4cache *c, const d4memref *m)
 				for (nsb = D4REFNSB (c, *m)/*c->lg2blocksize - c->lg2subblocksize*/;
 				     nsb-- > 0;
 				     bitoff++) {
-                    printf("\t\tinvalidate bit 1\n");
+				  printf("\t\tstart=%llu, bitoff=%d, off=%d\n",
+					 c->ranges[i].addr, bitoff, bitoff%CHAR_BIT);
+				  printf("\t\tinvalidate block addr=%llu\n",
+					 c->ranges[i].addr + bitoff * 64);
 					c->ranges[i].bitmap[bitoff/CHAR_BIT] &=
 					      ~(1<<(bitoff%CHAR_BIT));
-                    printf("\t\tinvalidate bit\n");
-                }
-                
-                
-                if (c->isllc) {
-                    printf("\tInside %s for LLC\n", __func__);
-                    printf("\t\tblock=%llu\n", baddr);
-                    // invalid the node in the LLC_mam map tree;
-                    d4memllc *p, *x;
-                    int found;
-                    d4addr blockaddr;
                     
-                    blockaddr = baddr;
-                    p = (c->root);
-                    x = p;
-                    found = 0;
-                    while (x != NULL) {
-                        p = x;
-                        if (blockaddr == x->blockaddr ) {
-                            printf("\t\t[%s] Found %0lx vmid=%u\n", __func__, x->blockaddr, x->vmid);
-                            found = 1;
-                            break;
+                    /* invalidate the block in the mem llc tree */
+                    if (c->isllc) {
+                        printf("\t\tinvalidate block=%llu\n", baddr);
+                        d4memllc *p, *x;
+                        int found;
+                        d4addr blockaddr;
+                        
+                        blockaddr = c->ranges[i].addr + bitoff * 64;
+                        p = (c->root);
+                        x = p;
+                        found = 0;
+                        while (x != NULL) {
+                            p = x;
+                            if (blockaddr == x->blockaddr ) {
+                                printf("\t\t[%s] Found %0lx vmid=%u\n", __func__, x->blockaddr, x->vmid);
+                                found = 1;
+                                break;
+                            }
+                            x = (blockaddr < x->blockaddr) ? x->left : x->right;
                         }
-                        x = (blockaddr < x->blockaddr) ? x->left : x->right;
+                        assert(found == 1);
+                        x->infvalid = 0;
                     }
-                    assert(found == 1);
-                    x->infvalid = 0;
                 }
                 
 				break;

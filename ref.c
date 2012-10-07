@@ -776,6 +776,7 @@ static int update_llc_mem_list(d4cache *c, d4addr blockaddr, int access, int vmi
                 if (x->infvalid == 0) {
                     c->vm_comp_miss++;
                     vm_miss = 3;
+                    printf("\t\tcompulsory miss due to infvalid\n");
                 } else {
                 
                     if (x->vmid != vmid) {
@@ -823,15 +824,15 @@ static int update_llc_mem_list(d4cache *c, d4addr blockaddr, int access, int vmi
             p->right = x;
         c->vm_comp_miss++;
         vm_miss = 3;
-        printf("\t\t[%s] insert %0lx by vmid %u\n", __func__, blockaddr, x->vmid);
+        printf("\t\t[%s] Comp miss insert %0lx by vmid %u\n", __func__, blockaddr, x->vmid);
         
     }
     
     double demand_comp_alltype;
     demand_comp_alltype = c->comp_miss[D4XMISC]
-    + c->comp_miss[D4XREAD]
-    + c->comp_miss[D4XWRITE]
-    +c->comp_miss[D4XINSTRN];
+                          + c->comp_miss[D4XREAD]
+                          + c->comp_miss[D4XWRITE]
+                          + c->comp_miss[D4XINSTRN];
     printf("\t\t[%s] vm comp_miss=%d\n", __func__, c->vm_comp_miss);
     printf("\t\t[%s] comp_miss=%f\n", __func__, demand_comp_alltype);
     return vm_miss;
@@ -1128,43 +1129,50 @@ void d4ref (d4cache *c, d4memref mr)
 				ptr->valid |= sbbits;
 			}
 	
+			int infmiss = 0; /* assume hit in infinite cache */
 			/* classify misses */
 			if (miss) {
-				int infmiss = 0; /* assume hit in infinite cache */
-				if (!fullmiss) /* hit in fully assoc: conflict miss */
-					c->conf_miss[(int)m.accesstype]++;
+				if (!fullmiss) { /* hit in fully assoc: conflict miss */
+				  c->conf_miss[(int)m.accesstype]++;
+				  if (vm_miss == 3) {
+				    c->vm_comp_miss--;
+				  }
+				}
 				else {
 					infmiss = d4infcache (c, m);
 					if (infmiss != 0) {/* first miss: compulsory */
-                        c->comp_miss[(int)m.accesstype]++;
-                    }
+					  c->comp_miss[(int)m.accesstype]++;
+					}
 					else	/* hit in infinite cache: capacity miss */
-						c->cap_miss[(int)m.accesstype]++;
+					  c->cap_miss[(int)m.accesstype]++;
 				}
 				if (blockmiss) {
-					if (!fullblockmiss) /* block hit in full assoc */
-						c->conf_blockmiss[(int)m.accesstype]++;
-					else if (infmiss == 1) /* block miss in full and inf */
-						c->comp_blockmiss[(int)m.accesstype]++;
-				else /* part of block hit in infinite cache */
-					c->cap_blockmiss[(int)m.accesstype]++;
+				  if (!fullblockmiss) /* block hit in full assoc */
+				    c->conf_blockmiss[(int)m.accesstype]++;
+				  else if (infmiss == 1) /* block miss in full and inf */
+				    c->comp_blockmiss[(int)m.accesstype]++;
+				  else /* part of block hit in infinite cache */
+				    c->cap_blockmiss[(int)m.accesstype]++;
 				}
-                
-                if (c->isllc) {
-                    double demand_comp_alltype;
-                    demand_comp_alltype = c->comp_miss[D4XMISC]
-                    + c->comp_miss[D4XREAD]
-                    + c->comp_miss[D4XWRITE]
-                    +c->comp_miss[D4XINSTRN];
-                    if ((demand_comp_alltype !=  c->vm_comp_miss ) && c->isllc) {
-                        printf("\t\tinconsistent vm_miss=%d, infmiss=%d\n", vm_miss, infmiss);
-                    }
-                    printf("\t\tvm_miss=%d, infmiss=%d\n", vm_miss, infmiss);
-                    printf("\t\tvm_comp_miss=%d\n", c->vm_comp_miss);
-                    printf("\t\tcomp_miss=%f\n", demand_comp_alltype);
-                }
+			} else {
+			  if (vm_miss == 3) {
+			    c->vm_comp_miss--;
+			  }
 			}
-	
+            
+            if (c->isllc) {
+                double demand_comp_alltype;
+                demand_comp_alltype = c->comp_miss[D4XMISC]
+                + c->comp_miss[D4XREAD]
+                + c->comp_miss[D4XWRITE]
+                +c->comp_miss[D4XINSTRN];
+                if ((demand_comp_alltype !=  c->vm_comp_miss ) && c->isllc) {
+                    printf("\t\tinconsistent vm_miss=%d, infmiss=%d\n", vm_miss, infmiss);
+                }
+                printf("\t\tvm_miss=%d, infmiss=%d\n", vm_miss, infmiss);
+                printf("\t\tvm_comp_miss=%d\n", c->vm_comp_miss);
+                printf("\t\tcomp_miss=%f\n", demand_comp_alltype);
+            }
             
             
 			/* take care of replaced block */
