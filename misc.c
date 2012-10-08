@@ -910,11 +910,9 @@ d4_invinfcache (d4cache *c, const d4memref *m)
             printf("\t\tmid=%d, range=%0lx, baddr=%0lx\n", i, middle_addr, baddr);
 			if (middle_addr <= baddr) {
 				lo = i + 1;		/* need to look higher */
-                printf("\t\tto higher\n");
             }
 			else if (c->ranges[i].addr > baddr) {
 				hi = i - 1;		/* need to look lower */
-                printf("\t\tto lower\n");
             }
 			else {				/* found the right range */
                 printf("\t\tnsb=%d\n", c->lg2blocksize - c->lg2subblocksize);
@@ -949,8 +947,9 @@ d4_invinfcache (d4cache *c, const d4memref *m)
                             }
                             x = (blockaddr < x->blockaddr) ? x->left : x->right;
                         }
-                        assert(found == 1);
-                        x->infvalid = 0;
+			// assert(found == 1);
+			if (found)
+			  x->infvalid = 0;
                     }
                 }
                 
