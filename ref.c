@@ -729,6 +729,7 @@ static int update_llc_mem_list(d4cache *c, d4addr blockaddr, int access, int vmi
     d4memllc *p, *x;
     int found;
     int vm_miss;
+    int index;
     
     vm_miss = 0;
     if ((c->root) == NULL) {
@@ -750,17 +751,28 @@ static int update_llc_mem_list(d4cache *c, d4addr blockaddr, int access, int vmi
     p = (c->root);
     x = p;
     found = 0;
-    while (x != NULL) {
-        p = x;
-        if (blockaddr == x->blockaddr) {
-            printf("\t\t[%s] Found %0lx vmid=%u, access=%d\n",
-                   __func__, x->blockaddr, x->vmid, access);
-            found = 1;
-            break;
-        }
-        x = (blockaddr < x->blockaddr) ? x->left : x->right;
-    }
     
+    index = (blockaddr) & (MEM_TABLE_SIZE - 1);
+    if (unlikely(mem_entry_table[index]->blockaddr != blockaddr)) {
+        while (x != NULL) {
+            p = x;
+            if (blockaddr == x->blockaddr) {
+                printf("\t\t[%s] Found %0lx vmid=%u, access=%d\n",
+                       __func__, x->blockaddr, x->vmid, access);
+                found = 1;
+                break;
+            }
+            x = (blockaddr < x->blockaddr) ? x->left : x->right;
+        }
+        
+        if (found) {
+            mem_entry_table[index] = x;
+        }
+    } else {
+        found = 1;
+        x = mem_entry_table[index];
+    }
+        
     if (!access)    /* For replacing, we must found the address */
         assert(found == 1);
     

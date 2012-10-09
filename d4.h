@@ -214,6 +214,17 @@ typedef struct d4_mem_llc {
     struct d4_mem_llc *left, *right;
 } d4memllc;
 
+#ifdef __GNUC__
+#define likely(x)       __builtin_expect((x),1)
+#define unlikely(x)     __builtin_expect((x),0)
+#else
+#define likely(x)       (x)
+#define unlikely(x)     (x)
+#endif
+
+#define MEM_TABLE_SIZE (1 << 8)
+d4memllc *mem_entry_table[MEM_TABLE_SIZE];
+
 //----------------------------------------------------------------------------
 
 /*
