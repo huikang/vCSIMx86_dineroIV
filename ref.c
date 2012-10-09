@@ -473,11 +473,9 @@ static int d4infcache (d4cache *c, d4memref m)
 	/* binary search for range containing our address */
 	hi = c->nranges-1;
 	lo = 0;
-    printf("\t\t[%s] sbaddr=%0lx, hi=%u\n", __func__, sbaddr, hi);
     
 	while (lo <= hi) {
 		i = lo + (hi-lo)/2;
-        printf("\t\tmid=%d\n", i);
 		if (c->ranges[i].addr + D4_BITMAP_RSIZE <= sbaddr)
 			lo = i + 1;		/* need to look higher */
 		else if (c->ranges[i].addr > sbaddr)
@@ -506,8 +504,6 @@ static int d4infcache (d4cache *c, d4memref m)
                 printf("\t\tExist range %d bitoff %d %d\n", i, (bitoff+b)/CHAR_BIT,
                        c->ranges[i].bitmap[(bitoff+b)/CHAR_BIT]);
             }
-            printf("\t\t[%s] nsb=%d\n", __func__, nsb);
-            
 			return nb==0 ? 1 : -1;
 		}
 	}
@@ -533,8 +529,7 @@ static int d4infcache (d4cache *c, d4memref m)
 		if (c->ranges[i].addr < sbaddr)
 			break;
 		c->ranges[i+1] = c->ranges[i];
-        printf("\t\tcopy old range %d to %d\n", i, i+1);
-        printf("\t\tRange %d is %0lx\n", i+1, c->ranges[i+1].addr);
+		printf("\t\tcopy old range %d to %d\n", i, i+1);
 	}
 	c->ranges[i+1].addr = sbaddr & ~(D4_BITMAP_RSIZE-1);
 	c->ranges[i+1].bitmap = calloc ((((D4_BITMAP_RSIZE + sbsize - 1)
@@ -556,7 +551,7 @@ static int d4infcache (d4cache *c, d4memref m)
                i+1, bitoff/CHAR_BIT,
                c->ranges[i+1].bitmap[bitoff/CHAR_BIT]);
     }
-    printf("\t\tInserted at range %d begining %0lx\n", i+1, c->ranges[i+1].addr);
+	// printf("\t\tInserted at range %d begining %0lx\n", i+1, c->ranges[i+1].addr);
 	return 1; /* we've not seen it before */
 }
 
@@ -852,7 +847,6 @@ D4_INLINE d4memref d4_splitm (d4cache *c, d4memref mr, d4addr ba)
 	int newsize;
 	d4pendstack *pf;
 
-    printf("\t\tInside split\n");
 	if (ba == D4ADDR2BLOCK (c, mr.address + mr.size - 1))
 		return mr;
 	pf = d4get_mref();
@@ -922,9 +916,9 @@ void d4ref (d4cache *c, d4memref mr)
 		 * Quickly check for top of stack.
 		 */
 		ptr = c->stack[setnumber].top;
-        if (ptr->valid == 0) {
+		/*if (ptr->valid == 0) {
             printf("%llu Invalid entry\n", blockaddr);
-        }
+	    }*/
 		if (ptr->blockaddr == blockaddr && ptr->valid != 0)
 			; /* found it */
 		else if (!D4CUSTOM || D4VAL (c, assoc) > 1)
@@ -958,9 +952,6 @@ void d4ref (d4cache *c, d4memref mr)
 		if ((!D4CUSTOM || !D4_OPT (prefetch_none)) && (m.accesstype == D4XREAD || m.accesstype == D4XINSTRN)) {
 			d4pendstack *pf = D4VAL (c, prefetchf) (c, m, miss, ptr);
 			if (pf != NULL) {
-                if (c->isllc) {
-                    printf("\t\tinside LLC Prefetch\n");
-                }
 				/* Note: 0 <= random() <= 2^31-1 and 0 <= random()/(INT_MAX/100) < 100. */
 				if (D4VAL (c, prefetch_abortpercent) > 0 && random()/(INT_MAX/100) < D4VAL (c, prefetch_abortpercent))
 					d4put_mref (pf);	/* throw it away */

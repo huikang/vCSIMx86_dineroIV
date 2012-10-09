@@ -825,7 +825,7 @@ d4invalidate (d4cache *c, const d4memref *m, int prop)
 	d4stacknode *ptr;
 	d4pendstack *newm;
 
-    printf("\tInside d4invalidate\n");
+	printf("\tInside d4invalidate\n");
 	if (m != NULL)
 		assert (m->accesstype == D4XINVAL);
 	if (prop) {
@@ -896,7 +896,7 @@ d4_invinfcache (d4cache *c, const d4memref *m)
 		/* binary search for range containing our address */
 		hi = c->nranges-1;
 		lo = 0;
-        printf("\t\t%s hi=%d cacheid=%d\n", __func__, hi, c->cacheid);
+
 		while (lo <= hi) {
             d4addr middle_addr;
 			i = lo + (hi-lo)/2;
@@ -907,7 +907,6 @@ d4_invinfcache (d4cache *c, const d4memref *m)
             }
             
             printf("\t\tmid=%d, lo=%d, hi=%d\n", i, lo, hi);
-            printf("\t\tmid=%d, range=%0lx, baddr=%0lx\n", i, middle_addr, baddr);
 			if (middle_addr <= baddr) {
 				lo = i + 1;		/* need to look higher */
             }
@@ -915,7 +914,6 @@ d4_invinfcache (d4cache *c, const d4memref *m)
 				hi = i - 1;		/* need to look lower */
             }
 			else {				/* found the right range */
-                printf("\t\tnsb=%d\n", c->lg2blocksize - c->lg2subblocksize);
                 printf("\t\tnsb=%d\n", D4REFNSB (c, *m));
 				for (nsb = D4REFNSB (c, *m)/*c->lg2blocksize - c->lg2subblocksize*/;
 				     nsb-- > 0;
