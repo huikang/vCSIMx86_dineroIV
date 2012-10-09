@@ -501,15 +501,15 @@ static int d4infcache (d4cache *c, d4memref m)
 			for (b = 0;  b < nsb;  b++) {
 				c->ranges[i].bitmap[(bitoff+b)/CHAR_BIT] |=
 					(1<<((bitoff+b)%CHAR_BIT));
-                printf("\t\tExist range %d bitoff %d %d\n", i, (bitoff+b)/CHAR_BIT,
-                       c->ranges[i].bitmap[(bitoff+b)/CHAR_BIT]);
+				// printf("\t\tExist range %d bitoff %d %d\n", i, (bitoff+b)/CHAR_BIT,
+				//   c->ranges[i].bitmap[(bitoff+b)/CHAR_BIT]);
             }
 			return nb==0 ? 1 : -1;
 		}
 	}
 	/* lo > hi: range not found; find position and insert new range */
 	if (c->nranges >= c->maxranges-1) {
-        printf("\t\t[%s] Add range cacheid=%d\n", __func__, c->cacheid);
+	  //printf("\t\t[%s] Add range cacheid=%d\n", __func__, c->cacheid);
 		/* ran out of range pointers; allocate some more */
 		int oldmaxranges = c->maxranges;
 		c->maxranges = (c->maxranges + 10) * 2;
@@ -529,7 +529,7 @@ static int d4infcache (d4cache *c, d4memref m)
 		if (c->ranges[i].addr < sbaddr)
 			break;
 		c->ranges[i+1] = c->ranges[i];
-		printf("\t\tcopy old range %d to %d\n", i, i+1);
+		//printf("\t\tcopy old range %d to %d\n", i, i+1);
 	}
 	c->ranges[i+1].addr = sbaddr & ~(D4_BITMAP_RSIZE-1);
 	c->ranges[i+1].bitmap = calloc ((((D4_BITMAP_RSIZE + sbsize - 1)
@@ -547,9 +547,9 @@ static int d4infcache (d4cache *c, d4memref m)
 	totbitmaps++;
 	for (b = 0;  b < nsb;  b++, bitoff++) {
 		c->ranges[i+1].bitmap[bitoff/CHAR_BIT] |= (1<<(bitoff%CHAR_BIT));
-        printf("\t\tInserted range %d bitoff %d %d\n",
-               i+1, bitoff/CHAR_BIT,
-               c->ranges[i+1].bitmap[bitoff/CHAR_BIT]);
+		//printf("\t\tInserted range %d bitoff %d %d\n",
+		//i+1, bitoff/CHAR_BIT,
+		//c->ranges[i+1].bitmap[bitoff/CHAR_BIT]);
     }
 	// printf("\t\tInserted at range %d begining %0lx\n", i+1, c->ranges[i+1].addr);
 	return 1; /* we've not seen it before */
@@ -753,26 +753,38 @@ static int update_llc_mem_list(d4cache *c, d4addr blockaddr, int access, int vmi
     found = 0;
     
     index = (blockaddr) & (MEM_TABLE_SIZE - 1);
-    if (unlikely(mem_entry_table[index]->blockaddr != blockaddr)) {
+    if (mem_entry_table[index] != NULL) {
+      if (unlikely(mem_entry_table[index]->blockaddr != blockaddr)) {
         while (x != NULL) {
-            p = x;
-            if (blockaddr == x->blockaddr) {
-                printf("\t\t[%s] Found %0lx vmid=%u, access=%d\n",
-                       __func__, x->blockaddr, x->vmid, access);
-                found = 1;
-                break;
-            }
-            x = (blockaddr < x->blockaddr) ? x->left : x->right;
+	  p = x;
+	  if (blockaddr == x->blockaddr) {
+	    //printf("\t\t[%s] Found %0lx vmid=%u, access=%d\n",
+	    //	   __func__, x->blockaddr, x->vmid, access);
+	    found = 1;
+	    break;
+	  }
+	  x = (blockaddr < x->blockaddr) ? x->left : x->right;
         }
-        
-        if (found) {
-            mem_entry_table[index] = x;
+        if (found) { /* insert to hash */
+	  mem_entry_table[index] = x;
         }
-    } else {
+      } else { /* this one is hashed */
         found = 1;
         x = mem_entry_table[index];
+      }
+    } else {
+      while (x != NULL) {
+	  p = x;
+	  if (blockaddr == x->blockaddr) {
+	    //printf("\t\t[%s] Found %0lx vmid=%u, access=%d\n",
+	    //	   __func__, x->blockaddr, x->vmid, access);
+	    found = 1;
+	    break;
+	  }
+	  x = (blockaddr < x->blockaddr) ? x->left : x->right;
+      }
     }
-        
+
     if (!access)    /* For replacing, we must found the address */
         assert(found == 1);
     
@@ -783,17 +795,17 @@ static int update_llc_mem_list(d4cache *c, d4addr blockaddr, int access, int vmi
                 if (x->infvalid == 0) {
                     c->vm_comp_miss++;
                     vm_miss = 3;
-                    printf("\t\tcompulsory miss due to infvalid\n");
+                    // printf("\t\tcompulsory miss due to infvalid\n");
                 } else {
                 
                     if (x->vmid != vmid) {
-                        printf("\t\t[%s] inter miss %u replace by %u\n",
-                               __func__, x->vmid, vmid);
+		      //printf("\t\t[%s] inter miss %u replace by %u\n",
+		      //       __func__, x->vmid, vmid);
                         c->inter_vm_miss++;
                         vm_miss = 1;
                     } else {
-                        printf("\t\t[%s] intra miss vmid=%u, state=%u\n",
-                               __func__, vmid, x->infvalid);
+		      //printf("\t\t[%s] intra miss vmid=%u, state=%u\n",
+		      //       __func__, vmid, x->infvalid);
                         c->intra_vm_miss++;
                         vm_miss = 2;
                     }
@@ -807,15 +819,15 @@ static int update_llc_mem_list(d4cache *c, d4addr blockaddr, int access, int vmi
                 x->infvalid = 1;
                 c->vm_comp_miss++;
                 vm_miss = 3;
-                printf("\t\t[%s] validate %0lx by vmid %u\n", __func__, blockaddr, x->vmid);
+                // printf("\t\t[%s] validate %0lx by vmid %u\n", __func__, blockaddr, x->vmid);
             }
         } else {        /* replace this element to memory, vmid causes the replacement */
             assert(x->state == in_llc);
             x->state = in_mem;
             x->vmid = vmid;
             //x->infvalid = 1;
-            printf("\t\t[%s] replacing %0lx to mem by vmid=%u\n",
-                   __func__, x->blockaddr, x->vmid);
+            //printf("\t\t[%s] replacing %0lx to mem by vmid=%u\n",
+	    //     __func__, x->blockaddr, x->vmid);
         }
     } else {
         /* Bring a new element to LLC */
@@ -831,7 +843,7 @@ static int update_llc_mem_list(d4cache *c, d4addr blockaddr, int access, int vmi
             p->right = x;
         c->vm_comp_miss++;
         vm_miss = 3;
-        printf("\t\t[%s] Comp miss insert %0lx by vmid %u\n", __func__, blockaddr, x->vmid);
+        //printf("\t\t[%s] Comp miss insert %0lx by vmid %u\n", __func__, blockaddr, x->vmid);
         
     }
     
@@ -840,8 +852,8 @@ static int update_llc_mem_list(d4cache *c, d4addr blockaddr, int access, int vmi
                           + c->comp_miss[D4XREAD]
                           + c->comp_miss[D4XWRITE]
                           + c->comp_miss[D4XINSTRN];
-    printf("\t\t[%s] vm comp_miss=%d\n", __func__, c->vm_comp_miss);
-    printf("\t\t[%s] comp_miss=%f\n", __func__, demand_comp_alltype);
+    //printf("\t\t[%s] vm comp_miss=%d\n", __func__, c->vm_comp_miss);
+    //printf("\t\t[%s] comp_miss=%f\n", __func__, demand_comp_alltype);
     return vm_miss;
 }
 
@@ -891,12 +903,11 @@ void d4ref (d4cache *c, d4memref mr)
 	/* special cases first */
     if ((D4VAL (c, flags) & D4F_MEM) != 0) { /* special case for simulated memory */
 		c->fetch[(int)mr.accesstype]++;
-        printf("\t\tIn main memory\n");
+		//printf("\t\tIn main memory\n");
     }
     else if (mr.accesstype == D4XCOPYB || mr.accesstype == D4XINVAL) {
 		d4memref m = mr;	/* dumb compilers might de-optimize if we take addr of mr */
 		if (m.accesstype == D4XCOPYB) {
-            printf("\t\tInside %s\n", __func__);
 			d4copyback (c, &m, 1);
         }
 		else
@@ -912,7 +923,7 @@ void d4ref (d4cache *c, d4memref mr)
 		const int walloc = !ronly && atype == D4XWRITE && D4VAL (c, wallocf) (c, m);
 		const int sbbits = D4ADDR2SBMASK (c, m);
         unsigned char vmid = mr.vmid;
-        printf("\t\tvmid=%u\n", vmid);
+        //printf("\t\tvmid=%u\n", vmid);
 		int miss, blockmiss, wback;
 		d4stacknode *ptr;
         int vm_miss;
@@ -1005,8 +1016,8 @@ void d4ref (d4cache *c, d4memref mr)
                  */
                 /* d4updatemmap (c, m); */
                 vm_miss = update_llc_mem_list(c, blockaddr, 1, vmid);
-                printf("\t\t[%s] LLC raddr=%0lx baddr=%0lx sbbits=%d setnumber=%d, vmid=%u\n",
-                       __func__, mr.address, blockaddr, sbbits, setnumber, mr.vmid);
+                /*printf("\t\t[%s] LLC raddr=%0lx baddr=%0lx sbbits=%d setnumber=%d, vmid=%u\n",
+		  __func__, mr.address, blockaddr, sbbits, setnumber, mr.vmid);*/
             }
             
 			if ((m.accesstype & D4PREFETCH) == 0) /* prefetching usage statistic */
@@ -1037,7 +1048,7 @@ void d4ref (d4cache *c, d4memref mr)
 				if (rptr->valid != 0) {
                     
 #if (D4DEBUG)
-					printf("\t\tdisplacing cache blockaddr: %llu\n", rptr->blockaddr);
+					printf("\t\tdisplacing blockaddr: %llu\n", rptr->blockaddr);
 #endif
                     d4memref tmp_m;
                     tmp_m.address = rptr->blockaddr;
@@ -1169,13 +1180,16 @@ void d4ref (d4cache *c, d4memref mr)
                 + c->comp_miss[D4XREAD]
                 + c->comp_miss[D4XWRITE]
                 +c->comp_miss[D4XINSTRN];
-                if ((demand_comp_alltype !=  c->vm_comp_miss ) && c->isllc) {
-                    printf("\t\tinconsistent vm_miss=%d, infmiss=%d\n", vm_miss, infmiss);
+#if (D4DEBUG)
+		if ((demand_comp_alltype !=  c->vm_comp_miss ) && c->isllc) {
+		  printf("\t\tinconsistent vm_miss=%d, infmiss=%d\n", vm_miss, infmiss);
                 }
                 printf("\t\tvm_miss=%d, infmiss=%d\n", vm_miss, infmiss);
                 printf("\t\tvm_comp_miss=%d\n", c->vm_comp_miss);
                 printf("\t\tcomp_miss=%f\n", demand_comp_alltype);
+#endif
             }
+
             
             
 			/* take care of replaced block */

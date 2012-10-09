@@ -206,7 +206,7 @@ tracein_din()
         i++;
     }
     r.vmid = atoi(vmid);
-    printf("vmid=%u\n", r.vmid);
+    //printf("vmid=%u\n", r.vmid);
     
 	return r;
 

@@ -824,8 +824,9 @@ d4invalidate (d4cache *c, const d4memref *m, int prop)
 	int stacknum;
 	d4stacknode *ptr;
 	d4pendstack *newm;
-
+#if (D4DEBUG)
 	printf("\tInside d4invalidate\n");
+#endif
 	if (m != NULL)
 		assert (m->accesstype == D4XINVAL);
 	if (prop) {
@@ -889,8 +890,6 @@ d4_invinfcache (d4cache *c, const d4memref *m)
 		unsigned int bitoff;	/* offset of bit in bitmap */
 		int hi, lo, nsb;
         
-        printf("\tInside %s baddr=%0lx\n", __func__, baddr);
-
 		bitoff = (baddr & (D4_BITMAP_RSIZE-1)) / sbsize;
 
 		/* binary search for range containing our address */
@@ -906,7 +905,7 @@ d4_invinfcache (d4cache *c, const d4memref *m)
                 middle_addr = c->ranges[i].addr + D4_BITMAP_RSIZE - 1;
             }
             
-            printf("\t\tmid=%d, lo=%d, hi=%d\n", i, lo, hi);
+            // printf("\t\tmid=%d, lo=%d, hi=%d\n", i, lo, hi);
 			if (middle_addr <= baddr) {
 				lo = i + 1;		/* need to look higher */
             }
@@ -914,20 +913,24 @@ d4_invinfcache (d4cache *c, const d4memref *m)
 				hi = i - 1;		/* need to look lower */
             }
 			else {				/* found the right range */
+#if (D4DEBUG)
                 printf("\t\tnsb=%d\n", D4REFNSB (c, *m));
-				for (nsb = D4REFNSB (c, *m)/*c->lg2blocksize - c->lg2subblocksize*/;
-				     nsb-- > 0;
-				     bitoff++) {
-				  printf("\t\tstart=%llu, bitoff=%d, off=%d\n",
-					 c->ranges[i].addr, bitoff, bitoff%CHAR_BIT);
-				  printf("\t\tinvalidate block addr=%llu\n",
-					 c->ranges[i].addr + bitoff * 64);
-					c->ranges[i].bitmap[bitoff/CHAR_BIT] &=
-					      ~(1<<(bitoff%CHAR_BIT));
-                    
+#endif
+		for (nsb = D4REFNSB (c, *m)/*c->lg2blocksize - c->lg2subblocksize*/;
+		     nsb-- > 0;
+		     bitoff++) {
+#if (D4DEBUG)
+		  printf("\t\tstart=%llu, bitoff=%d, off=%d\n",
+		  	 c->ranges[i].addr, bitoff, bitoff%CHAR_BIT);
+		  printf("\t\tinvalidate block addr=%llu\n",
+			 c->ranges[i].addr + bitoff * 64);
+#endif
+		  c->ranges[i].bitmap[bitoff/CHAR_BIT] &=
+		    ~(1<<(bitoff%CHAR_BIT));
+		  
                     /* invalidate the block in the mem llc tree */
                     if (c->isllc) {
-                        printf("\t\tinvalidate block=%llu\n", baddr);
+		      // printf("\t\tinvalidate block=%llu\n", baddr);
                         d4memllc *p, *x;
                         int found;
                         d4addr blockaddr;
@@ -939,7 +942,9 @@ d4_invinfcache (d4cache *c, const d4memref *m)
                         while (x != NULL) {
                             p = x;
                             if (blockaddr == x->blockaddr ) {
+#if (D4DEBUG)
                                 printf("\t\t[%s] Found %0lx vmid=%u\n", __func__, x->blockaddr, x->vmid);
+#endif
                                 found = 1;
                                 break;
                             }

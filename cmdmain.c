@@ -2104,6 +2104,8 @@ int main (int argc, char **argv)
 
 #if (D4DEBUG)
 	int instruction_count = 1;
+#else
+	int instruction_count = 1;
 #endif
 
 	tintcount = stat_interval;
@@ -2113,8 +2115,9 @@ int main (int argc, char **argv)
 
 #if (D4DEBUG)
 		printf("instruction count: %d\n", instruction_count++);
+#else
+		printf("count: %d\n", instruction_count++);
 #endif
-
 		if (r.cpuID >= corecount)
 			die("memory reference on invalid core[%d]; check that L1 cache declarations are sufficient for trace lines\n", r.cpuID);
 		if (r.accesstype == D4TRACE_END)
@@ -2140,7 +2143,6 @@ int main (int argc, char **argv)
 #if (D4DEBUG)
 			printf("DIRECTORY_HASH: %llu\n", directory_hash);
 #endif
-            printf("xxx1\n");
 			d4addr blockaddr = D4ADDR2BLOCK(cd[0], r.address);
 			d4directoryNode *found = d4findDirectoryNode(coherency_directory[directory_hash], blockaddr);
 			if(found == NULL) {
@@ -2151,9 +2153,9 @@ int main (int argc, char **argv)
 				d4changeDirectoryState(found, &r, cd);
 		}
         
-        printf("r cpuid=%d vmid=%u\n", r.cpuID, r.vmid);
+		//printf("r cpuid=%d vmid=%u\n", r.cpuID, r.vmid);
 		switch (r.accesstype) {
-        case D4XINSTRN:	  	d4ref (ci[r.cpuID], r);  printf("inst\n"); break;
+        case D4XINSTRN:	  	d4ref (ci[r.cpuID], r);  break;
 		case D4XINVAL:	  	d4ref (cd[r.cpuID], r);  printf("inva\n"); break;/* modified - might not function correctly */
 		default:	  		d4ref (cd[r.cpuID], r);  /*printf("dat\n")*/; break;
 		}
