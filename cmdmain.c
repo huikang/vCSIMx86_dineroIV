@@ -2116,7 +2116,7 @@ int main (int argc, char **argv)
 #if (D4DEBUG)
 		printf("instruction count: %d\n", instruction_count++);
 #else
-		printf("count: %d\n", instruction_count++);
+		printf("ic: %d\n", instruction_count++);
 #endif
 		if (r.cpuID >= corecount)
 			die("memory reference on invalid core[%d]; check that L1 cache declarations are sufficient for trace lines\n", r.cpuID);
