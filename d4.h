@@ -55,7 +55,7 @@
 #endif
 
 #ifndef D4DEBUG
-#define D4DEBUG 0
+#define D4DEBUG 1
 #endif
 
 /* Type of a simulated address */
