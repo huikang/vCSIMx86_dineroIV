@@ -724,11 +724,12 @@ d4_invblock (d4cache *c, int stacknum, d4stacknode *ptr)
 	if (c->stack[stacknum].n > D4HASH_THRESH)
 		d4_unhash (c, stacknum, ptr);
     
-    /*
+    
     if (c->isllc) {
         printf("\tInside d4_invblock for LLC\n");
         printf("\t\tblock=%llu\n", ptr->blockaddr);
         // invalid the node in the LLC_mam map tree;
+        
         d4memllc *p, *x;
         int found;
         d4addr blockaddr;
@@ -748,7 +749,8 @@ d4_invblock (d4cache *c, int stacknum, d4stacknode *ptr)
         }
         assert(found == 1);
         x->valid = 0;
-    }*/
+        x->state = in_mem;
+    }
 }
 
 
@@ -845,6 +847,10 @@ d4invalidate (d4cache *c, const d4memref *m, int prop)
 		d4addr blockaddr = D4ADDR2BLOCK (c, m->address);
 		stacknum = D4ADDR2SET (c, m->address);
 		ptr = d4_find (c, stacknum, blockaddr);
+        if (c->isllc) {
+            printf("\t\tinvalide one block addr=%llu, baddr=%llu\n",
+                   m->address, blockaddr);
+        }
 		if (ptr != NULL)
 			d4_invblock (c, stacknum, ptr);
 		if ((c->flags & D4F_CCC) != 0 &&	/* fully assoc cache */
@@ -895,7 +901,10 @@ d4_invinfcache (d4cache *c, const d4memref *m)
 		/* binary search for range containing our address */
 		hi = c->nranges-1;
 		lo = 0;
-
+        
+#if (D4DEBUG)
+        printf("\t\t[%s], addr=%llu\n", __func__, baddr);
+#endif
 		while (lo <= hi) {
             d4addr middle_addr;
 			i = lo + (hi-lo)/2;
@@ -904,8 +913,9 @@ d4_invinfcache (d4cache *c, const d4memref *m)
             if (!middle_addr) { /* overflow !*/
                 middle_addr = c->ranges[i].addr + D4_BITMAP_RSIZE - 1;
             }
-            
-            // printf("\t\tmid=%d, lo=%d, hi=%d\n", i, lo, hi);
+#if (D4DEBUG)
+             printf("\t\tmid=%d, lo=%d, hi=%d\n", i, lo, hi);
+#endif
 			if (middle_addr <= baddr) {
 				lo = i + 1;		/* need to look higher */
             }
@@ -930,7 +940,9 @@ d4_invinfcache (d4cache *c, const d4memref *m)
 		  
                     /* invalidate the block in the mem llc tree */
                     if (c->isllc) {
-		      // printf("\t\tinvalidate block=%llu\n", baddr);
+#if (D4DEBUG)  
+		      printf("\t\tinvalidate block=%llu\n", baddr);
+#endif
                         d4memllc *p, *x;
                         int found;
                         d4addr blockaddr;

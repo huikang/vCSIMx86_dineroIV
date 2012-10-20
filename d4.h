@@ -210,7 +210,8 @@ typedef struct d4_mem_llc {
     d4addr  blockaddr;
     unsigned char vmid;
     MEM_LLC_STATE state;
-    unsigned char infvalid;     /* valid flag to be consistent with infinite cache */
+    unsigned char infvalid;   /* valid flag to be consistent with infinite cache */
+    unsigned char valid;      /* valid flag to be consistent with normal LLC cache */
     struct d4_mem_llc *left, *right;
 } d4memllc;
 
