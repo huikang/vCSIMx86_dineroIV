@@ -724,7 +724,6 @@ d4_invblock (d4cache *c, int stacknum, d4stacknode *ptr)
 	if (c->stack[stacknum].n > D4HASH_THRESH)
 		d4_unhash (c, stacknum, ptr);
     
-    /*
     if (c->isllc) {
         printf("\tInside d4_invblock for LLC\n");
         printf("\t\tblock=%llu\n", ptr->blockaddr);
@@ -748,7 +747,8 @@ d4_invblock (d4cache *c, int stacknum, d4stacknode *ptr)
         }
         assert(found == 1);
         x->valid = 0;
-    }*/
+	x->state = in_mem;
+    }
 }
 
 
