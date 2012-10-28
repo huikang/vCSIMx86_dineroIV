@@ -725,8 +725,10 @@ d4_invblock (d4cache *c, int stacknum, d4stacknode *ptr)
 		d4_unhash (c, stacknum, ptr);
     
     if (c->isllc) {
+#if (D4DEBUG)
         printf("\tInside d4_invblock for LLC\n");
         printf("\t\tblock=%llu\n", ptr->blockaddr);
+#endif
         // invalid the node in the LLC_mam map tree;
         d4memllc *p, *x;
         int found;
