@@ -741,7 +741,9 @@ d4_invblock (d4cache *c, int stacknum, d4stacknode *ptr)
         while (x != NULL) {
             p = x;
             if (blockaddr == x->blockaddr ) {
+#if (D4DEBUG)
                 printf("\t\t[%s] Found %0lx vmid=%u\n", __func__, x->blockaddr, x->vmid);
+#endif
                 found = 1;
                 break;
             }
