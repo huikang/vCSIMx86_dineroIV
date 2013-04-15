@@ -53,14 +53,14 @@ SHELL = /bin/sh
 
 
 LIB_OBJ_LIST = ref.o misc.o
-CMD_OBJ_LIST = cmdmain.o cmdargs.o tracein.o dinfmt.o
-	#xdinfmt.o binaryfmt.o pixie32fmt.o pixie64fmt.o
+CMD_OBJ_LIST = cmdmain.o cmdargs.o tracein.o \
+	xdinfmt.o dinfmt.o binaryfmt.o pixie32fmt.o pixie64fmt.o
 
 D4_SRC = $(srcdir)
 D4_LIB = $(D4_SRC)/libd4.a
-CMD_SRC_LIST = $(D4_SRC)/cmdmain.c $(D4_SRC)/cmdargs.c $(D4_SRC)/tracein.c $(D4_SRC)/dinfmt.c 
-	#$(D4_SRC)/xdinfmt.c $(D4_SRC)/binaryfmt.c \
-	#$(D4_SRC)/pixie32fmt.c $(D4_SRC)/pixie64fmt.c
+CMD_SRC_LIST = $(D4_SRC)/cmdmain.c $(D4_SRC)/cmdargs.c $(D4_SRC)/tracein.c \
+	$(D4_SRC)/xdinfmt.c $(D4_SRC)/dinfmt.c $(D4_SRC)/binaryfmt.c \
+	$(D4_SRC)/pixie32fmt.c $(D4_SRC)/pixie64fmt.c
 CUSTOM_NAME = d4custom # this is really just a placeholder
 
 CC = gcc
@@ -99,8 +99,8 @@ misc.o: misc.c d4.h config.h
 cmdmain.o: cmdmain.c d4.h cmdd4.h cmdargs.h tracein.h config.h
 cmdargs.o: cmdargs.c d4.h cmdd4.h cmdargs.h config.h
 tracein.o: tracein.c d4.h tracein.h config.h
-#xdinfmt.o: xdinfmt.c d4.h cmdd4.h tracein.h config.h
+xdinfmt.o: xdinfmt.c d4.h cmdd4.h tracein.h config.h
 dinfmt.o: dinfmt.c d4.h cmdd4.h tracein.h config.h
-#binaryfmt.o: binaryfmt.c d4.h cmdd4.h tracein.h config.h
-#pixie32fmt.o: pixie32fmt.c d4.h cmdd4.h tracein.h config.h
-#pixie64fmt.o: pixie64fmt.c d4.h cmdd4.h tracein.h config.h
+binaryfmt.o: binaryfmt.c d4.h cmdd4.h tracein.h config.h
+pixie32fmt.o: pixie32fmt.c d4.h cmdd4.h tracein.h config.h
+pixie64fmt.o: pixie64fmt.c d4.h cmdd4.h tracein.h config.h
